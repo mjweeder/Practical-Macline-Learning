@@ -1,1 +1,1 @@
-    The Practicle-Machine-learning Reprository contains the PracticalMachineLearning.RMD andPracticalMachineLearning.html file to meet the requirements of the Cousera Practical Machine learning Course from John Hopkins.
+    The Practicle-Machine-learning Reprository contains the PracticalMachineLearning.RMD andPracticalMachineLearning.html file to meet the requirements of the Cousera Practical Machine learning Course from John Hopkins.  After trying to review the html file in github, github said that it could not read the large html file so I also included the pdf file.
