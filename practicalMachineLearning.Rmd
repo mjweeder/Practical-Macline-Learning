@@ -1,0 +1,191 @@
+---
+title: "Practical Machine Learning assignment"
+author: "Ron Collins"
+date: "July 1, 2016"
+output: html_document
+---
+
+### Practical Machine Learning/ Prediction Assignment
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal is be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#sbia_paper_section#ixzz4D5o79kNx
+
+
+## Goal
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+
+
+## loading necessary packages
+```{r}
+library(rpart)
+library(caret)
+library(rattle)
+library(corrplot)
+library(rpart.plot)
+library(randomForest)
+```
+
+
+## Data down loading and preprocessing
+The training dataset will be split into training and validation datasets for development of the prediction algrothin.  The test data set will be used for the project quiz.
+
+# Data down loading.
+
+```{r "inputData"}
+
+# Read training data file
+trainingData = read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings=c("", "NA", "NULL"))
+
+dim(trainingData)
+# Read Testing data file
+testingData = read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings=c("", "NA", "NULL"))
+dim(testingData)
+
+```
+# split training data set into training and validation datasets.
+```{r "splitTrainingDataset"}
+inTrain <- createDataPartition(y=trainingData$classe, p=0.7, list=FALSE)
+training <- trainingData[inTrain,]
+validation <- trainingData[-inTrain,]
+dim(training)
+dim(validation)
+```
+
+Pre-screening of the training dataset
+
+    From visual inspection of the training dataset it was obvious that a lot of the variables contained missing values which will be removed from the training dataset because they do not contribute information useful for development of the prediction algrothim.  This cleaning decreases the number of variables from 160 to 60.
+
+```{r, echo=TRUE, "trainingDataScreened"}
+trainingDataScreened <- training[ , colSums(is.na(trainingData)) == 0]
+
+dim(trainingDataScreened)
+
+```
+
+From visual inspection of the training dataset it was obvious that the following variables (X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window) would not be used in development of the prediction equations.  Consequently, they will be removed. This cleaning decreases the number of variables from 60 to 53. 
+
+```{r}
+remove = c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+trainingDataRelevent <- trainingDataScreened[, -which(names(trainingDataScreened) %in% remove)]
+dim(trainingDataRelevent)
+```
+
+
+Variables which are highly corolated(90%) will be removed using findCorrelation().  This cleaning decreases the number of variables from  to 46. 
+
+
+```{r "highlyCorrelatedPredictors"}
+corMatrix <- cor(trainingDataRelevent[, -53])
+corrplot(corMatrix, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+
+corrMatrix <- cor(na.omit(trainingDataRelevent[sapply(trainingDataRelevent, is.numeric)]))
+dim(corrMatrix)
+
+
+# Remove Predictors with high correlations-90
+removecor = findCorrelation(corrMatrix, cutoff = .90, verbose = TRUE)
+
+trainingDataCorr = trainingDataRelevent[,-removecor]
+dim(trainingDataCorr)
+
+```
+## Development of Prediction Algrothim
+
+Three methods will be applied to model the regressions (in the trainingDataCorr dataset). The three models will be cross validated on the validation dataset. The models applied to the Test dataset. The model with the highest accuracy will be used for the quiz predictions. The methods are: Decision Tree, Random Forest and Generalized Boosted Model. 
+
+A Confusion Matrix is plotted at the end of each analysis to better visualize the accuracy of the models.
+
+# Decision Tree prediction model development
+```{r "rpart"}
+
+set.seed(11111)
+fitModel<- rpart(classe ~ ., data=trainingDataCorr, method="class")
+fancyRpartPlot(fitModel)
+```
+
+# Cross Validation of the decision tree prediction using confusion Matrix
+
+```{r "crossValidationRpart"}
+treePred <- predict(fitModel, newdata=validation, type="class")
+confMatPredTree<- confusionMatrix(treePred, validation$classe)
+confMatPredTree
+
+```
+The accuracy of the Decision Tree predictor is 0.7098.
+
+# Plot of Decision Tree predictor
+```{r}
+plot(confMatPredTree$table, col = confMatPredTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatPredTree$overall['Accuracy'], 4)))
+```
+
+
+## Random Forest
+
+```{r "randomForest"}
+
+set.seed(11111)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=trainingDataCorr, method="rf",trControl=controlRF)
+modFitRandForest$finalModel
+
+```
+# Cross Validation od the decission tree prediction using confusion Matrix
+```{r}
+predictRandForest <- predict(modFitRandForest, newdata=validation)
+crossValidRandForest <- confusionMatrix(predictRandForest, validation$classe)
+crossValidRandForest
+```
+The accuracy of the Random Forest model is 0.9939
+
+# Plot of Random Forest model predictors
+```{r}
+plot(crossValidRandForest$table, col = crossValidRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =",
+     round(crossValidRandForest$overall['Accuracy'], 4)))
+```
+
+## Generalized Boosted Model
+```{r "GBM"}
+set.seed(11111)
+gbmControl <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbmModelfit  <- train(classe ~ ., data=trainingDataCorr, method = "gbm",trControl = gbmControl, verbose = FALSE)
+gbmModelfit$finalModel
+```
+# Prediction on Validation dataset
+```{r}
+predictGBM <- predict(gbmModelfit, newdata=validation)
+confMatGBM <- confusionMatrix(predictGBM, validation$classe)
+confMatGBM
+```
+The accuracy of the Generalized Bosted Model is 0.9601
+
+# Plot of Generalized Bosted Model predictors
+```{r}
+plot(confMatGBM$table, col = confMatGBM$byClass, 
+     main = paste("Generalized Boosted - Accuracy =",
+                  round(confMatGBM$overall['Accuracy'], 4)))
+```
+
+## Conducting the quiz test for the fit of the selected model.
+The model with the highest accuracy is the Random Forest Model.
+
+    
+    Decision Tree : 0.7098
+    Random Forest : 0.9939  
+              GBM : 0.9601
+
+The Random Forest model will be used to predict the results from the testing dataset.
+```{r}
+predictTEST <- predict(modFitRandForest, newdata=testingData)
+predictTEST
+```
+
